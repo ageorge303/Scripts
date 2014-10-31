@@ -1,0 +1,143 @@
+#/bin/bash  -x
+
+# 'deliver_customer_attempts' does three things:
+#
+#  1. Removes any .csv files older than today's date minus
+#     DAYS_TO_DELETE. This also includes any corresponding
+#     .zip and marker files.
+#
+#  2. Creates a .zip file for any .csv files which don't
+#     currently have them. It also creates a marker file,
+#     which is a snapshot of the .csv file's current size,
+#     and incorporates that size into the marker filename.
+#     Eg. attempt_1003314_20140516.csv.filesize.203
+#
+#     When a .csv does have a .zip file, its current size
+#     is checked against the marker file size. If they don't
+#     match - ie. the .csv has grown - the .zip file is recreated.
+#     
+#     The T7100 cause value - column 8 - is mapped to an ISUP code.
+#
+#  3. Pushes the .zip files to pri.custftp.intelepeer.net via rsync.
+
+#/bin/bash  -x
+
+# Change these values as necessary
+path="/home/ageorge/customer_udr"
+tmpfile="./.isup.tmp"
+DAYS_TO_DELETE=+9
+SSH_KEY=/home/ageorge/.ssh/cdr_publishing_key.pri
+
+# Setup test data - comment out if not running tests.
+# ./create_deliver_customer_attempts_test_data
+
+
+# Generate a marker file which contains a snapshot of the current .csv's size.
+updateFileSizeMarker()
+{
+    # echo "Updating marker for $1"
+    if [ -f $1.filesize.* ]
+    then
+        rm $1.filesize.*
+    fi
+
+    filesize=$(stat -c%s $1)
+    nameWithFileSize=$1.filesize.$filesize
+    touch $nameWithFileSize
+}
+
+
+# Purge files that have aged-out.
+purgeFiles()
+{
+    #
+    # Delete any .csv files that are older than Y-days back.
+    #
+    DELETED_FILES=`find $path -name "*.csv" -type f -mtime $DAYS_TO_DELETE -print -delete`
+
+    #
+    # Delete the corresponding .filesize and .zip files.
+    #
+    for d in $DELETED_FILES
+    do
+        echo "Deleting $d"
+        echo "Deleting $d.filesize.*"
+        rm $d.filesize.*
+        if [ -f $d.zip ]
+        then
+            echo "Deleting $d.zip"
+            rm $d.zip
+        fi
+    done
+}
+
+
+# Create .zip files.
+createZipFiles()
+{
+    #
+    # Create a zip file for each .csv that needs one.
+    #
+    FILES_TO_ZIP=`find $path -name "*.csv" -type f -print`
+    for z in $FILES_TO_ZIP
+    do
+        # Convert T7100 cause values to ISUP codes.
+        # mapT7100ToISUP $z
+
+        # Only create a .zip file if there isn't one already,
+        # or if the csv has grown since the last .zip was created.
+        currentCsvFileSize=$(stat -c%s $z)
+
+        if [ -f $z.filesize.* ]
+        then
+            markerFileSize=$(echo $z.filesize.* | awk -F. '{print $4}')
+        else
+            markerFileSize=-1
+        fi
+
+        # echo "markerFileSize: $markerFileSize"
+        # echo "currentCsvFileSize: $currentCsvFileSize"
+
+        if [ $currentCsvFileSize -ne $markerFileSize ]
+        then
+            updateFileSizeMarker $z
+            echo "file is $z"
+            echo "output file is $z.TRANSLATED"
+            python translate_customer_attempt_csv.py --inputfile=$z --outputfile=$z.TRANSLATED
+            echo "Creating $z.zip"
+            cat $z.TRANSLATED | zip > $z.zip
+            #rm -f $z.TRANSLATED
+        fi
+    done
+}
+
+pushFilesToCustftp()
+{
+    echo "Pushing files to custftp"
+
+    for dir in `ls "$path"`
+    do
+    if [ -d "$path/$dir" ]; then
+        echo $dir
+        # rsync -avz -e "ssh -i $SSH_KEY" $path/$dir/*.zip \
+        #    apps@pri.custftp.intelepeer.net:/home/customers/by_sap_id/$dir
+        if [ `ls $path/$dir | wc -l` -gt 0 ]
+        then
+            rsync -avz -e "ssh -i /home/ageorge/.ssh/cdr_publishing_key.pri" $path/$dir/*.zip \
+                apps@pri.custftp.intelepeer.net:/home/customers/by_sap_id/$dir
+        fi
+    fi
+    done
+
+    # rsync -avz -e "ssh -i /home/ageorge/.ssh/cdr_publishing_key.pri" customer_udr/1115555/*.zip \
+    #     apps@pri.custftp.intelepeer.net:/home/customers/by_sap_id/1115555
+}
+
+
+
+purgeFiles
+
+createZipFiles
+
+pushFilesToCustftp
+ 

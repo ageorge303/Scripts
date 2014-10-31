@@ -1,0 +1,8 @@
+#/bin/bash  -x
+
+inputfile="./Data.txt"
+# tr -d '\r' < Data.txt > datafile
+
+cat $inputfile | while read TrunkGroupID TrunkGroupName GatewayID; do
+   echo "INSERT into foo (COL1, COL2, COL3) VALUES ('$TrunkGroupID', '$TrunkGroupName', '$GatewayID');" >> output
+done

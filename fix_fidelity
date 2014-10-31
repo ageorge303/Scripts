@@ -1,0 +1,55 @@
+#/bin/bash  -x
+
+# 'fix_fidelity'
+
+services="FIDELITY_VOICE_SERVICES_$(date +'%Y')_$(date +'%m')"
+svcs_trz="FIDELITY_VOICE_SVCS_TRZ_$(date +'%Y')_$(date +'%m')"
+data_trzr="FIDELITY_VOICE_AND_DATA_TRZR_$(date +'%Y')_$(date +'%m')"
+
+echo $services
+echo $svcs_trz
+echo $data_trzr
+
+if [ ! -d tmp ]; then
+    echo "Directory tmp does not exist"
+    mkdir tmp
+fi
+
+cd tmp
+if [ $? -eq 0 ]; then
+    echo "Changed directory to tmp"
+    rm -rf *
+else
+    echo "Couldn't change directory to tmp. Exiting..."
+    exit
+fi
+
+processFile()
+{
+    zipfile="../$1*.zip"
+    echo "processFile $zipfile"
+    if [ -f $zipfile ]; then
+        echo "$zipfile exists" 
+        cp $zipfile .
+        unzip $1*.zip
+        csv="$1*.csv"
+        echo $csv
+        /home/ageorge/bin/ensureDecimals.py $csv tmpfile.csv
+        /home/ageorge/bin/unix2dos tmpfile.csv
+        mv tmpfile.csv $csv
+        #echo "zip $zipfile $csv"
+        echo "zip $1*.zip $csv"
+        conv_zipfile="$1*.zip"
+        echo "conv_zipfile $conv_zipfile"
+        zip $conv_zipfile $csv
+        cp $conv_zipfile ..
+        rm *.csv *.zip
+    fi
+}
+
+processFile $services
+processFile $svcs_trz
+processFile $data_trzr
+
+cd ..
+rmdir tmp

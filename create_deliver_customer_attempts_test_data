@@ -1,0 +1,175 @@
+#!/bin/bash
+
+# This script sets up a customer_csvs directory structure,
+# populating it with dummy UDR data. It is intended to be
+# run prior to running the 'deliver_customer_attempts' script
+# for testing purposes.
+# 
+# 'deliver_customer_attempts' does three things:
+# 
+#  1. Removes any .csv files older than today's date minus
+#     DAYS_TO_DELETE. This also includes any corresponding
+#     .zip and marker files.
+#
+#  2. Creates a .zip file for any .csv files which don't
+#     currently have them. It also creates a marker file,
+#     which is a snapshot of the .csv file's current size,
+#     and incorporates that size into the marker filename.
+#     Eg. attempt_1003314_20140516.csv.filesize.203
+#
+#     When a .csv does have a .zip file, its current size
+#     if checked against the marker file size. If they don't
+#     match - ie. the .csv has grown - the .zip file is recreated.
+# 
+#  3. Pushes the .zip files to custftp.intelepeer.net via rsync.
+# 
+# 
+# 
+
+cd customer_udr
+if [ $? -eq 0 ]; then
+    echo "Changed directory to customer_cdr"
+    echo "Creating test data"
+    rm -rf *
+    mkdir 10000385  10000388  10000415  1002460  1003271  1003314  1003902  1005607 1115555
+else	
+    echo "Couldn't change directory customer_udr. Exiting..."
+    exit
+fi
+
+touch 10000385/attempt_10000385_20140407.csv
+touch 10000385/attempt_10000385_20140408.csv
+touch 10000385/attempt_10000385_20140409.csv
+touch 10000385/attempt_10000385_20140410.csv
+touch 10000385/attempt_10000385_20140507.csv
+touch 10000385/attempt_10000385_20140508.csv
+touch 10000385/attempt_10000385_20140509.csv
+touch 10000385/attempt_10000385_20140510.csv
+touch 10000385/attempt_10000385_20140511.csv
+touch 10000385/attempt_10000385_20140512.csv
+touch 10000385/attempt_10000385_20140513.csv
+touch 10000385/attempt_10000385_20140514.csv
+touch 10000385/attempt_10000385_20140515.csv
+touch 10000385/attempt_10000385_20140516.csv
+
+touch 10000388/attempt_10000388_20140512.csv
+touch 10000388/attempt_10000388_20140513.csv
+touch 10000388/attempt_10000388_20140514.csv
+touch 10000388/attempt_10000388_20140515.csv
+touch 10000388/attempt_10000388_20140516.csv
+
+touch 10000415/attempt_10000415_20140512.csv
+touch 10000415/attempt_10000415_20140513.csv
+touch 10000415/attempt_10000415_20140514.csv
+touch 10000415/attempt_10000415_20140515.csv
+touch 10000415/attempt_10000415_20140516.csv
+
+touch 1002460/attempt_1002460_20140512.csv
+touch 1002460/attempt_1002460_20140513.csv
+touch 1002460/attempt_1002460_20140514.csv
+touch 1002460/attempt_1002460_20140515.csv
+touch 1002460/attempt_1002460_20140516.csv
+
+touch 1003271/attempt_1003271_20140512.csv
+touch 1003271/attempt_1003271_20140513.csv
+touch 1003271/attempt_1003271_20140514.csv
+touch 1003271/attempt_1003271_20140515.csv
+touch 1003271/attempt_1003271_20140516.csv
+
+touch 1003314/attempt_1003314_20140512.csv
+touch 1003314/attempt_1003314_20140513.csv
+touch 1003314/attempt_1003314_20140514.csv
+touch 1003314/attempt_1003314_20140515.csv
+touch 1003314/attempt_1003314_20140516.csv
+echo "some text some text some text some text" >> 1003314/attempt_1003314_20140512.csv
+echo "some text some text some text some text some text" >> 1003314/attempt_1003314_20140513.csv
+echo "some text some text some text some text some text" >> 1003314/attempt_1003314_20140514.csv
+echo "some text some text some text some text some text some text banana" >> 1003314/attempt_1003314_20140515.csv
+echo "some text some text some text some text some text some text some text some text some text some" >> 1003314/attempt_1003314_20140516.csv
+
+touch 1003902/attempt_1003902_20140512.csv
+touch 1003902/attempt_1003902_20140513.csv
+touch 1003902/attempt_1003902_20140514.csv
+touch 1003902/attempt_1003902_20140515.csv
+touch 1003902/attempt_1003902_20140516.csv
+
+touch 1005607/attempt_1005607_20140512.csv
+touch 1005607/attempt_1005607_20140513.csv
+touch 1005607/attempt_1005607_20140514.csv
+touch 1005607/attempt_1005607_20140515.csv
+touch 1005607/attempt_1005607_20140516.csv
+
+echo "some text some text some text some text" >> 1005607/attempt_1005607_20140514.csv
+echo "some text some text some text some text some text" >> 1005607/attempt_1005607_20140515.csv
+echo "some text some text some text some text some text some text" >> 1005607/attempt_1005607_20140516.csv
+
+# Generate the filesize marker files
+FILES=$(find . -type f -name *.csv)
+
+for f in $FILES
+do
+  filesize=$(stat -c%s $f)
+  #echo "Size of $f is $filesize"
+
+  nameWithFileSize=$f.filesize.$filesize
+  touch $nameWithFileSize
+  #echo "New filename: $filename"
+done
+
+# For testing purposes, insert some data into any .csv files than have zero length.
+# Also, there could be some files that don't have zero length. I need the purge_customer_csvs to create
+# .zip files for them too, which is why I'm re-setting the filesize to 0 for those cases.
+# This will cause a mismatch between .csv and .fileisze.n, causing the snapshot to be updated and a .zip
+# file created.
+for f in $FILES
+do
+  filesize=$(stat -c%s $f)
+  if [ $filesize -eq 0 ]
+  then
+    echo "Some text to make filesize non-zero" >> $f
+  else
+    rm $f.filesize.*
+    touch $f.filesize.0
+  fi
+done
+
+# Change the modifications times of some .csvs to a couple of months ago.
+# These are the ones that should get deleted.
+touch -t 201404041200 10000385/attempt_10000385_20140407.csv
+touch -t 201404041200 10000385/attempt_10000385_20140408.csv
+touch -t 201404041200 10000385/attempt_10000385_20140409.csv
+touch -t 201404041200 10000385/attempt_10000385_20140410.csv
+touch -t 201404041200 10000385/attempt_10000385_20140507.csv
+touch -t 201404041200 10000385/attempt_10000385_20140508.csv
+touch -t 201404041200 10000385/attempt_10000385_20140509.csv
+touch -t 201404041200 10000385/attempt_10000385_20140510.csv
+touch -t 201404041200 10000385/attempt_10000385_20140511.csv
+touch -t 201404041200 10000385/attempt_10000385_20140512.csv
+touch -t 201404041200 10000385/attempt_10000385_20140513.csv
+touch -t 201404041200 1003902/attempt_1003902_20140512.csv
+touch -t 201404041200 1003902/attempt_1003902_20140513.csv
+touch -t 201404041200 1003902/attempt_1003902_20140514.csv
+touch -t 201404041200 1003902/attempt_1003902_20140515.csv
+touch -t 201404041200 1003902/attempt_1003902_20140516.csv
+touch -t 201404041200 1005607/attempt_1005607_20140512.csv
+touch -t 201404041200 1005607/attempt_1005607_20140513.csv
+
+# Create some csvs that won't have a marker snapshot
+touch 1005607/attempt_1005607_20140517.csv
+touch 1005607/attempt_1005607_20140518.csv
+touch 1005607/attempt_1005607_20140519.csv
+touch 1005607/attempt_1005607_20140520.csv
+
+# Increase csv size to be bigger than the marker file - this tests
+# the scenario whereby the .csv has grown bigger than the snapshot file size.
+echo "elephantelephantelephantelephantelephantelephantelephantelephantelephant" >> 1003314/attempt_1003314_20140514.csv
+echo "lions tigers bears oh my" >> 1003314/attempt_1003314_20140515.csv
+echo " alpha some text some text some text some text some text some text some text some text some text some omega" >> 1003314/attempt_1003314_20140516.csv
+
+# 1115555 is a dummy account
+cp 1003314/* 1115555
+
+# Empty directories to test rsync'ing.
+mkdir 1225555
+mkdir 1225556
+mkdir 1225557

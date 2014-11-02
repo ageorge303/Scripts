@@ -9,7 +9,7 @@ import pickle
 import csv
 
 pp = pprint.PrettyPrinter(indent=4)
-cl = MongoClient('uccgen03.den02', 27017)
+cl = MongoClient('mongo_host.xxx', 27017)
 
 def cdrs(day, invoice, criteria):
     colname = 'merged_cdrs_' + day.strftime('%Y%m%d')
